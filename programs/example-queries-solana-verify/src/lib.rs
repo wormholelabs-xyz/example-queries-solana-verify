@@ -28,10 +28,7 @@ pub mod example_queries_solana_verify {
         processor::verify_signatures(ctx, signer_indices)
     }
 
-    pub fn verify_query(
-        ctx: Context<VerifyQuery>,
-        bytes: Vec<u8>,
-    ) -> Result<()> {
+    pub fn verify_query(ctx: Context<VerifyQuery>, bytes: Vec<u8>) -> Result<()> {
         processor::verify_query(ctx, bytes)
     }
 }
