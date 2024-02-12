@@ -1,6 +1,7 @@
 use crate::{
     error::ExampleQueriesSolanaVerifyError,
-    state::{QuerySignatureSet, WormholeGuardianSet}, QUERY_MESSAGE_LEN,
+    state::{QuerySignatureSet, WormholeGuardianSet},
+    QUERY_MESSAGE_LEN,
 };
 use anchor_lang::{
     prelude::*,
@@ -65,7 +66,7 @@ pub fn verify_signatures(ctx: Context<VerifySignatures>, signer_indices: [i8; 19
     // is no data from the instruction sysvar loaded by that point. We have to load it and perform
     // the safety checks in this instruction handler.
     let instructions_sysvar = &ctx.accounts.instructions;
-    
+
     // We grab the index of the instruction before this instruction, which should be the sig verify
     // program.
     let sig_verify_index = u16::checked_sub(
@@ -116,7 +117,10 @@ pub fn verify_signatures(ctx: Context<VerifySignatures>, signer_indices: [i8; 19
 
         // And verify that the message hash is the same as the one already encoded in the signature
         // set.
-        require!(message == signature_set.message, ExampleQueriesSolanaVerifyError::MessageMismatch);
+        require!(
+            message == signature_set.message,
+            ExampleQueriesSolanaVerifyError::MessageMismatch
+        );
     } else {
         // We are assuming that the signature set has not been "initialized" if there is no
         // indication of verified signatures (via `sig_verify_successes`) written to this account

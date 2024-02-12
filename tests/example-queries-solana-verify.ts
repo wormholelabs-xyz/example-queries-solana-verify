@@ -308,7 +308,7 @@ describe("example-queries-solana-verify", () => {
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:40. Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
+      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:44. Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
     );
   });
   it("Rejects an invalid guardian set!", async () => {
@@ -360,7 +360,7 @@ describe("example-queries-solana-verify", () => {
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:59. Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
+      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:67. Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
     );
   });
   it("Rejects a no quorum signature set!", async () => {
@@ -408,7 +408,7 @@ describe("example-queries-solana-verify", () => {
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:49. Error Code: NoQuorum. Error Number: 6515. Error Message: NoQuorum."
+      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:53. Error Code: NoQuorum. Error Number: 6515. Error Message: NoQuorum."
     );
   });
   it("Rejects a valid signature on the wrong guardian index!", async () => {
