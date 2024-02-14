@@ -16,7 +16,8 @@ export async function createVerifySignaturesInstructions(
   bytes: string,
   signatures: string[],
   signatureSet: anchor.web3.PublicKey,
-  commitment?: anchor.web3.Commitment
+  commitment?: anchor.web3.Commitment,
+  guardianSetIndex?: number
 ): Promise<anchor.web3.TransactionInstruction[]> {
   const MAX_LEN_GUARDIAN_KEYS = 19;
 
@@ -25,12 +26,14 @@ export async function createVerifySignaturesInstructions(
     Buffer.from(keccak256(Buffer.from(bytes, "hex")).slice(2), "hex"),
   ]);
 
-  const info = await getWormholeBridgeData(
-    connection,
-    wormholeProgramId,
-    commitment
-  );
-  const guardianSetIndex = info.guardianSetIndex;
+  if (guardianSetIndex === undefined) {
+    const info = await getWormholeBridgeData(
+      connection,
+      wormholeProgramId,
+      commitment
+    );
+    guardianSetIndex = info.guardianSetIndex;
+  }
 
   const guardianSetData = await getGuardianSet(
     connection,
