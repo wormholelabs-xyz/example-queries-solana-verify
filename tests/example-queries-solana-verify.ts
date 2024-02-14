@@ -1,7 +1,10 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { keccak256 } from "@ethersproject/keccak256";
-import { QUERY_RESPONSE_PREFIX } from "@wormhole-foundation/wormhole-query-sdk";
+import {
+  QUERY_RESPONSE_PREFIX,
+  QueryProxyMock,
+} from "@wormhole-foundation/wormhole-query-sdk";
 import { assert, expect, use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { ExampleQueriesSolanaVerify } from "../target/types/example_queries_solana_verify";
@@ -97,7 +100,7 @@ describe("example-queries-solana-verify", () => {
       );
       for (
         let guardianSetIndex = 0;
-        guardianSetIndex <= 3;
+        guardianSetIndex <= 4;
         guardianSetIndex++
       ) {
         const gsAddr = deriveGuardianSetKey(
@@ -120,6 +123,7 @@ describe("example-queries-solana-verify", () => {
   });
 
   const validSignatureSet = anchor.web3.Keypair.generate();
+  const validMockSignatureSet = anchor.web3.Keypair.generate();
   const expiredSignatureSet = anchor.web3.Keypair.generate();
   const wethNameResponse = {
     bytes:
@@ -209,77 +213,77 @@ describe("example-queries-solana-verify", () => {
         .rpc()
     ).to.be.fulfilled;
   });
+  it("Verifies mock signatures!", async () => {
+    const p = anchor.getProvider();
+    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
+    const mock = new QueryProxyMock({});
+    const mockSignatures = mock.sign(
+      Buffer.from(wethNameResponse.bytes, "hex")
+    );
+
+    const instructions = await createVerifySignaturesInstructions(
+      p.connection,
+      program,
+      coreBridgeAddress,
+      payer.publicKey,
+      wethNameResponse.bytes,
+      mockSignatures,
+      validMockSignatureSet.publicKey,
+      undefined,
+      4
+    );
+    const unsignedTransactions: anchor.web3.Transaction[] = [];
+    for (let i = 0; i < instructions.length; i += 2) {
+      unsignedTransactions.push(
+        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
+      );
+    }
+    for (const tx of unsignedTransactions) {
+      await expect(
+        anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
+          payer,
+          validMockSignatureSet,
+        ])
+      ).to.be.fulfilled;
+    }
+    // this will fail if the account does not exist, match discriminator, and parse
+    await expect(
+      program.account.querySignatureSet.fetch(validMockSignatureSet.publicKey)
+    ).to.be.fulfilled;
+  });
+  it("Verifies mock queries!", async () => {
+    const guardianSetIndex = 4;
+    await expect(
+      program.methods
+        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+        .accounts({
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          signatureSet: validMockSignatureSet.publicKey,
+        })
+        .rpc()
+    ).to.be.fulfilled;
+  });
   it("Rejects an expired guardian set!", async () => {
     // notably, `opWethNameResponse` does not have guardian index 7 - xLabs, which is not in guardian set 2
 
     const p = anchor.getProvider();
     const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
-    const connection = p.connection;
-    const bytes = opWethNameResponse.bytes;
-    const signatures = opWethNameResponse.signatures;
-    const signatureSet = expiredSignatureSet;
-    const wormholeProgramId = coreBridgeAddress;
-    const commitment = undefined;
+    const guardianSetIndex = 2; // this one is expired
 
-    // begin code from createVerifySignaturesInstructions
-    const MAX_LEN_GUARDIAN_KEYS = 19;
-
-    const hash = Buffer.concat([
-      Buffer.from(QUERY_RESPONSE_PREFIX),
-      Buffer.from(keccak256(Buffer.from(bytes, "hex")).slice(2), "hex"),
-    ]);
-
-    // THIS IS CHANGED FOR THIS TEST
-    const guardianSetIndex = 2;
-
-    const guardianSetData = await getGuardianSet(
-      connection,
-      wormholeProgramId,
-      guardianSetIndex,
-      commitment
+    const instructions = await createVerifySignaturesInstructions(
+      p.connection,
+      program,
+      coreBridgeAddress,
+      payer.publicKey,
+      opWethNameResponse.bytes,
+      opWethNameResponse.signatures,
+      expiredSignatureSet.publicKey,
+      undefined,
+      guardianSetIndex
     );
-
-    const guardianSignatures =
-      responseSignaturesToGuardianSignature(signatures);
-    const guardianKeys = guardianSetData.keys;
-
-    const batchSize = 1;
-    const instructions: anchor.web3.TransactionInstruction[] = [];
-    for (let i = 0; i < Math.ceil(guardianSignatures.length / batchSize); ++i) {
-      const start = i * batchSize;
-      const end = Math.min(guardianSignatures.length, (i + 1) * batchSize);
-
-      const signatureStatus = new Array(MAX_LEN_GUARDIAN_KEYS).fill(-1);
-      const signatures: Buffer[] = [];
-      const keys: Buffer[] = [];
-      for (let j = 0; j < end - start; ++j) {
-        const item = guardianSignatures.at(j + start)!;
-        signatures.push(item.signature);
-
-        const key = guardianKeys.at(item.index)!;
-        keys.push(key);
-
-        signatureStatus[item.index] = j;
-      }
-
-      instructions.push(createSecp256k1Instruction(signatures, keys, hash));
-
-      const ix = await program.methods
-        .verifySignatures(signatureStatus)
-        .accounts({
-          payer: payer.publicKey,
-          guardianSet: deriveGuardianSetKey(
-            wormholeProgramId,
-            guardianSetIndex
-          ),
-          instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-          signatureSet: signatureSet.publicKey,
-        })
-        .instruction();
-
-      instructions.push(ix);
-    }
-    // end code from createVerifySignaturesInstructions
 
     const unsignedTransactions: anchor.web3.Transaction[] = [];
     for (let i = 0; i < instructions.length; i += 2) {
@@ -291,7 +295,7 @@ describe("example-queries-solana-verify", () => {
       await expect(
         anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
           payer,
-          signatureSet,
+          expiredSignatureSet,
         ])
       ).to.be.fulfilled;
     }
@@ -304,7 +308,7 @@ describe("example-queries-solana-verify", () => {
             coreBridgeAddress,
             guardianSetIndex
           ),
-          signatureSet: signatureSet.publicKey,
+          signatureSet: expiredSignatureSet.publicKey,
         })
         .rpc()
     ).to.be.rejectedWith(

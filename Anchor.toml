@@ -98,7 +98,12 @@ filename = "tests/accounts/core_bridge_mainnet/guardian_set_1.json"
 address = "HwCQDTkvQzjqddy3iZ2FL7bvkeVmC9eHYRkDieRGyMCB"
 filename = "tests/accounts/core_bridge_mainnet/guardian_set_2.json"
 
-### Wormhole Core Bridge (Mainnet) -- Guardian Set 3
+### Wormhole Core Bridge (Mainnet) -- Guardian Set 3 (current)
 [[test.validator.account]]
 address = "6d3w8mGjJauf6gCAg7WfLezbaPmUHYGuoNutnfYF1RYM"
 filename = "tests/accounts/core_bridge_mainnet/guardian_set_3.json"
+
+### Wormhole Core Bridge (Mainnet) -- Guardian Set 4 (mock)
+[[test.validator.account]]
+address = "AFEXK4A1BU7BZfi8niAmker98LH9EARB544wKGPXwMyy"
+filename = "tests/accounts/core_bridge_mainnet/guardian_set_4_mock.json"
