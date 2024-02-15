@@ -11,8 +11,8 @@ Learn more about developing with Queries in [the docs](https://docs.wormhole.com
 - [x] Verify mainnet queries using an active mainnet core bridge guardian set account
 - [x] Verify mocked queries using a mock core bridge guardian set account on a mainnet address
 - [x] Validate a query result passed via instruction data
+- [x] Rust parsing for all query requests and responses
 
-- [ ] Rust parsing for all query requests and responses
 - [ ] Verify testnet queries using an active testnet core bridge guardian set account
 - [ ] Validate a query result passed via account
 - [ ] Allow for cleanup of signature set accounts
