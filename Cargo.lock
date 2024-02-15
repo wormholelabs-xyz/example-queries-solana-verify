@@ -317,6 +317,7 @@ dependencies = [
  "anchor-derive-accounts 0.29.0",
  "anchor-derive-serde",
  "anchor-derive-space 0.29.0",
+ "anchor-syn 0.29.0",
  "arrayref",
  "base64 0.13.1",
  "bincode",
@@ -1048,6 +1049,7 @@ name = "example-queries-solana-verify"
 version = "0.1.0"
 dependencies = [
  "anchor-lang 0.29.0",
+ "byteorder",
  "wormhole-anchor-sdk",
  "wormhole-core-bridge-solana",
 ]
