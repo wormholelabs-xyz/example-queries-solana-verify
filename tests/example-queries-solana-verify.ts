@@ -4,6 +4,7 @@ import { keccak256 } from "@ethersproject/keccak256";
 import {
   QUERY_RESPONSE_PREFIX,
   QueryProxyMock,
+  QueryResponse,
 } from "@wormhole-foundation/wormhole-query-sdk";
 import { assert, expect, use } from "chai";
 import chaiAsPromised from "chai-as-promised";
@@ -266,6 +267,28 @@ describe("example-queries-solana-verify", () => {
         .rpc()
     ).to.be.fulfilled;
   });
+  it("Parses queries!", async () => {
+    const p = anchor.getProvider();
+    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+    const guardianSetIndex = info.guardianSetIndex;
+    console.log(QueryResponse.from(wethNameResponse.bytes).request.requests[0]);
+    console.log(QueryResponse.from(wethNameResponse.bytes).responses[0]);
+    const tx = await program.methods
+      .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+      .accounts({
+        guardianSet: deriveGuardianSetKey(coreBridgeAddress, guardianSetIndex),
+        signatureSet: validSignatureSet.publicKey,
+      })
+      .rpc();
+    let transaction: null | anchor.web3.VersionedTransactionResponse = null;
+    while (transaction == null) {
+      transaction = await p.connection.getTransaction(tx, {
+        commitment: "confirmed",
+        maxSupportedTransactionVersion: 0,
+      });
+    }
+    console.log(transaction);
+  });
   it("Rejects an expired guardian set!", async () => {
     // notably, `opWethNameResponse` does not have guardian index 7 - xLabs, which is not in guardian set 2
 
@@ -312,7 +335,7 @@ describe("example-queries-solana-verify", () => {
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:44. Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
+      "Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
     );
   });
   it("Rejects an invalid guardian set!", async () => {
@@ -364,7 +387,7 @@ describe("example-queries-solana-verify", () => {
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:67. Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
+      "Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
     );
   });
   it("Rejects a no quorum signature set!", async () => {
@@ -412,7 +435,7 @@ describe("example-queries-solana-verify", () => {
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError thrown in programs/example-queries-solana-verify/src/processor/verify_query.rs:53. Error Code: NoQuorum. Error Number: 6515. Error Message: NoQuorum."
+      "Error Code: NoQuorum. Error Number: 6515. Error Message: NoQuorum."
     );
   });
   it("Rejects a valid signature on the wrong guardian index!", async () => {

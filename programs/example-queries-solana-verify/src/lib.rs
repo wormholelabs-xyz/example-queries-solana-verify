@@ -12,6 +12,7 @@ mod processor;
 pub(crate) use processor::*;
 
 pub mod state;
+pub mod structs;
 
 #[program]
 pub mod example_queries_solana_verify {
