@@ -14,13 +14,13 @@ pub struct QueryResponse {
 impl QueryResponse {
     pub const RESPONSE_VERSION: u8 = 1;
 
-    pub fn deserialize(data: &Vec<u8>) -> std::result::Result<QueryResponse, std::io::Error> {
+    pub fn deserialize(data: &[u8]) -> std::result::Result<QueryResponse, std::io::Error> {
         let mut rdr = Cursor::new(data);
         Self::deserialize_from_reader(&mut rdr)
     }
 
     pub fn deserialize_from_reader(
-        rdr: &mut Cursor<&Vec<u8>>,
+        rdr: &mut Cursor<&[u8]>,
     ) -> std::result::Result<QueryResponse, std::io::Error> {
         let version = rdr.read_u8()?;
         if version != Self::RESPONSE_VERSION {
@@ -71,15 +71,13 @@ pub struct PerChainQueryResponse {
 }
 
 impl PerChainQueryResponse {
-    pub fn deserialize(
-        data: &Vec<u8>,
-    ) -> std::result::Result<PerChainQueryResponse, std::io::Error> {
+    pub fn deserialize(data: &[u8]) -> std::result::Result<PerChainQueryResponse, std::io::Error> {
         let mut rdr = Cursor::new(data);
         Self::deserialize_from_reader(&mut rdr)
     }
 
     pub fn deserialize_from_reader(
-        rdr: &mut Cursor<&Vec<u8>>,
+        rdr: &mut Cursor<&[u8]>,
     ) -> std::result::Result<PerChainQueryResponse, std::io::Error> {
         let chain_id = rdr.read_u16::<BigEndian>()?;
         let query_type = rdr.read_u8()?;
@@ -128,15 +126,13 @@ pub struct EthCallQueryResponse {
 }
 
 impl EthCallQueryResponse {
-    pub fn deserialize(
-        data: &Vec<u8>,
-    ) -> std::result::Result<EthCallQueryResponse, std::io::Error> {
+    pub fn deserialize(data: &[u8]) -> std::result::Result<EthCallQueryResponse, std::io::Error> {
         let mut rdr = Cursor::new(data);
         Self::deserialize_from_reader(&mut rdr)
     }
 
     pub fn deserialize_from_reader(
-        rdr: &mut Cursor<&Vec<u8>>,
+        rdr: &mut Cursor<&[u8]>,
     ) -> std::result::Result<EthCallQueryResponse, std::io::Error> {
         let block_number = rdr.read_u64::<BigEndian>()?;
         let mut block_hash = [0u8; 32];
@@ -171,14 +167,14 @@ pub struct EthCallByTimestampQueryResponse {
 
 impl EthCallByTimestampQueryResponse {
     pub fn deserialize(
-        data: &Vec<u8>,
+        data: &[u8],
     ) -> std::result::Result<EthCallByTimestampQueryResponse, std::io::Error> {
         let mut rdr = Cursor::new(data);
         Self::deserialize_from_reader(&mut rdr)
     }
 
     pub fn deserialize_from_reader(
-        rdr: &mut Cursor<&Vec<u8>>,
+        rdr: &mut Cursor<&[u8]>,
     ) -> std::result::Result<EthCallByTimestampQueryResponse, std::io::Error> {
         let target_block_number = rdr.read_u64::<BigEndian>()?;
         let mut target_block_hash = [0u8; 32];
@@ -217,14 +213,14 @@ pub struct EthCallWithFinalityQueryResponse {
 
 impl EthCallWithFinalityQueryResponse {
     pub fn deserialize(
-        data: &Vec<u8>,
+        data: &[u8],
     ) -> std::result::Result<EthCallWithFinalityQueryResponse, std::io::Error> {
         let mut rdr = Cursor::new(data);
         Self::deserialize_from_reader(&mut rdr)
     }
 
     pub fn deserialize_from_reader(
-        rdr: &mut Cursor<&Vec<u8>>,
+        rdr: &mut Cursor<&[u8]>,
     ) -> std::result::Result<EthCallWithFinalityQueryResponse, std::io::Error> {
         let EthCallQueryResponse {
             block_number,
@@ -258,14 +254,14 @@ pub struct SolanaAccountResult {
 
 impl SolanaAccountQueryResponse {
     pub fn deserialize(
-        data: &Vec<u8>,
+        data: &[u8],
     ) -> std::result::Result<SolanaAccountQueryResponse, std::io::Error> {
         let mut rdr = Cursor::new(data);
         Self::deserialize_from_reader(&mut rdr)
     }
 
     pub fn deserialize_from_reader(
-        rdr: &mut Cursor<&Vec<u8>>,
+        rdr: &mut Cursor<&[u8]>,
     ) -> std::result::Result<SolanaAccountQueryResponse, std::io::Error> {
         let slot_number = rdr.read_u64::<BigEndian>()?;
         let block_time = rdr.read_u64::<BigEndian>()?;
