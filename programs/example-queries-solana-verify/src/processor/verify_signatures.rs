@@ -1,12 +1,12 @@
 use crate::{
     error::ExampleQueriesSolanaVerifyError,
     state::{QuerySignatureSet, WormholeGuardianSet},
-    QUERY_MESSAGE_LEN,
 };
 use anchor_lang::{
     prelude::*,
     solana_program::{self, program_memory::sol_memcpy, sysvar},
 };
+use wormhole_query_sdk::QUERY_MESSAGE_LEN;
 
 /// Offset schema used by the Sig Verify native program.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace, Debug)]

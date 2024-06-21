@@ -2,17 +2,12 @@ use anchor_lang::prelude::*;
 
 declare_id!("HkDXBFRS9Tv9295d9wEVRL61c1pUXj3WZHiaTNZ9Q7TQ");
 
-/// Length: 35
-const MESSAGE_PREFIX: &[u8] = b"query_response_0000000000000000000|";
-const QUERY_MESSAGE_LEN: usize = MESSAGE_PREFIX.len() + 32;
-
 pub mod error;
 
 mod processor;
 pub(crate) use processor::*;
 
 pub mod state;
-pub mod structs;
 
 #[program]
 pub mod example_queries_solana_verify {

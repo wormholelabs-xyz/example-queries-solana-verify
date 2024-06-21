@@ -1,5 +1,5 @@
-use crate::QUERY_MESSAGE_LEN;
 use anchor_lang::prelude::*;
+use wormhole_query_sdk::QUERY_MESSAGE_LEN;
 
 #[account]
 #[derive(Debug, InitSpace)]

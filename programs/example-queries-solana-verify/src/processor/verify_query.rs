@@ -1,12 +1,14 @@
 use crate::{
     error::ExampleQueriesSolanaVerifyError,
     state::{QuerySignatureSet, WormholeGuardianSet},
-    structs::{ChainSpecificQuery, ChainSpecificResponse, QueryResponse},
-    MESSAGE_PREFIX, QUERY_MESSAGE_LEN,
 };
 use anchor_lang::{
     prelude::*,
     solana_program::{self},
+};
+use wormhole_query_sdk::{
+    structs::{ChainSpecificQuery, ChainSpecificResponse, QueryResponse},
+    MESSAGE_PREFIX, QUERY_MESSAGE_LEN,
 };
 
 /// Compute quorum based on the number of guardians in a guardian set.
