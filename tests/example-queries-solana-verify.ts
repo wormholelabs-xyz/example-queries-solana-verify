@@ -1,18 +1,14 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { keccak256 } from "@ethersproject/keccak256";
 import {
-  QUERY_RESPONSE_PREFIX,
   QueryProxyMock,
   QueryResponse,
 } from "@wormhole-foundation/wormhole-query-sdk";
 import { assert, expect, use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { ExampleQueriesSolanaVerify } from "../target/types/example_queries_solana_verify";
-import { responseSignaturesToGuardianSignature } from "./helpers/GuardianSignature";
-import { deriveGuardianSetKey, getGuardianSet } from "./helpers/guardianSet";
-import { createSecp256k1Instruction } from "./helpers/secp256k1";
 import { getWormholeBridgeData } from "./helpers/config";
+import { deriveGuardianSetKey } from "./helpers/guardianSet";
 import { createVerifySignaturesInstructions } from "./helpers/verifySignature";
 
 use(chaiAsPromised);
@@ -33,6 +29,8 @@ describe("example-queries-solana-verify", () => {
   const coreBridgeAddress = new anchor.web3.PublicKey(
     "worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth"
   );
+
+  const mockGuardianSetIndex = 5;
 
   it("Core exists!", async () => {
     const p = anchor.getProvider();
@@ -99,9 +97,15 @@ describe("example-queries-solana-verify", () => {
         bridgeConfig !== null,
         "mainnet bridge config account does not exist"
       );
+      const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+      const currentGuardianSetIndex = info.guardianSetIndex;
+      assert(
+        mockGuardianSetIndex === currentGuardianSetIndex + 1,
+        "mockGuardianSetIndex is not set to following index"
+      );
       for (
         let guardianSetIndex = 0;
-        guardianSetIndex <= 4;
+        guardianSetIndex <= mockGuardianSetIndex;
         guardianSetIndex++
       ) {
         const gsAddr = deriveGuardianSetKey(
@@ -113,7 +117,7 @@ describe("example-queries-solana-verify", () => {
         );
         assert(
           guardianSet !== null,
-          `mainnet guardian set ${guardianSetIndex} account does not exist`
+          `mainnet guardian set ${guardianSetIndex} account (${gsAddr}) does not exist`
         );
       }
     }
@@ -231,7 +235,7 @@ describe("example-queries-solana-verify", () => {
       mockSignatures,
       validMockSignatureSet.publicKey,
       undefined,
-      4
+      mockGuardianSetIndex
     );
     const unsignedTransactions: anchor.web3.Transaction[] = [];
     for (let i = 0; i < instructions.length; i += 2) {
@@ -253,14 +257,13 @@ describe("example-queries-solana-verify", () => {
     ).to.be.fulfilled;
   });
   it("Verifies mock queries!", async () => {
-    const guardianSetIndex = 4;
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
         .accounts({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
-            guardianSetIndex
+            mockGuardianSetIndex
           ),
           signatureSet: validMockSignatureSet.publicKey,
         })
