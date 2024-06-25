@@ -208,7 +208,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
@@ -260,7 +260,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             mockGuardianSetIndex
@@ -278,7 +278,7 @@ describe("example-queries-solana-verify", () => {
     console.log(QueryResponse.from(wethNameResponse.bytes).responses[0]);
     const tx = await program.methods
       .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-      .accounts({
+      .accountsPartial({
         guardianSet: deriveGuardianSetKey(coreBridgeAddress, guardianSetIndex),
         signatureSet: validSignatureSet.publicKey,
       })
@@ -329,7 +329,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
@@ -346,7 +346,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(coreBridgeAddress, 2),
           signatureSet: validSignatureSet.publicKey,
         })
@@ -362,7 +362,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
@@ -381,7 +381,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes + "00", "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
@@ -429,7 +429,7 @@ describe("example-queries-solana-verify", () => {
     await expect(
       program.methods
         .verifyQuery(Buffer.from(wethNameResponse.bytes + "00", "hex"))
-        .accounts({
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex

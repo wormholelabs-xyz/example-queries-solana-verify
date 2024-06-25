@@ -71,7 +71,6 @@ export async function createVerifySignaturesInstructions(
       .accounts({
         payer,
         guardianSet: deriveGuardianSetKey(wormholeProgramId, guardianSetIndex),
-        instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         signatureSet,
       })
       .instruction();

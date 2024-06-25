@@ -10,6 +10,7 @@ use wormhole_query_sdk::{
     structs::{ChainSpecificQuery, ChainSpecificResponse, QueryResponse},
     MESSAGE_PREFIX, QUERY_MESSAGE_LEN,
 };
+use wormhole_solana_consts::CORE_BRIDGE_PROGRAM_ID;
 
 /// Compute quorum based on the number of guardians in a guardian set.
 #[inline]
@@ -27,7 +28,7 @@ pub struct VerifyQuery<'info> {
             signature_set.guardian_set_index.to_be_bytes().as_ref()
         ],
         bump,
-        seeds::program = wormhole_anchor_sdk::wormhole::program::id()
+        seeds::program = CORE_BRIDGE_PROGRAM_ID
     )]
     guardian_set: Account<'info, WormholeGuardianSet>,
 

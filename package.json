@@ -5,10 +5,10 @@
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.29.0",
+    "@coral-xyz/anchor": "0.30.1",
     "@ethersproject/keccak256": "^5.7.0",
-    "@wormhole-foundation/wormhole-query-sdk": "^0.0.9",
-    "axios": "^1.6.7"
+    "@wormhole-foundation/wormhole-query-sdk": "^0.0.12",
+    "axios": "^1.7.2"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",

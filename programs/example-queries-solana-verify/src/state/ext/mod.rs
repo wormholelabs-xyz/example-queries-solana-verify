@@ -1,4 +1,5 @@
 pub use anchor_lang::prelude::*;
+use wormhole_solana_consts::CORE_BRIDGE_PROGRAM_ID;
 
 #[derive(Debug, AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct WormholeGuardianSet {
@@ -18,8 +19,14 @@ pub struct WormholeGuardianSet {
 // TODO: does there need to be some sort of seed check as well?
 impl Owner for WormholeGuardianSet {
     fn owner() -> Pubkey {
-        wormhole_anchor_sdk::wormhole::program::id()
+        CORE_BRIDGE_PROGRAM_ID
     }
+}
+
+// workaround for anchor 0.30.1
+// https://github.com/coral-xyz/anchor/blob/e6d7dafe12da661a36ad1b4f3b5970e8986e5321/spl/src/idl_build.rs#L11
+impl anchor_lang::Discriminator for WormholeGuardianSet {
+    const DISCRIMINATOR: [u8; 8] = [0; 8];
 }
 
 impl AccountSerialize for WormholeGuardianSet {}
