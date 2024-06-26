@@ -33,7 +33,12 @@ pub struct VerifyQuery<'info> {
     guardian_set: Account<'info, WormholeGuardianSet>,
 
     /// Stores signature validation from Sig Verify native program.
+    #[account(mut, has_one = refund_recipient, close = refund_recipient)]
     signature_set: Account<'info, QuerySignatureSet>,
+
+    /// CHECK: This account is the refund recipient for the above signature_set
+    #[account(address = signature_set.refund_recipient)]
+    refund_recipient: AccountInfo<'info>,
 }
 
 impl<'info> VerifyQuery<'info> {

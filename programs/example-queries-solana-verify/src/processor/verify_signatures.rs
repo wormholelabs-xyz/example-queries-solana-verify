@@ -130,6 +130,7 @@ pub fn verify_signatures(ctx: Context<VerifySignatures>, signer_indices: [i8; 19
             sig_verify_successes: vec![false; guardians.len()],
             message,
             guardian_set_index: guardian_set.index,
+            refund_recipient: ctx.accounts.payer.key(),
         });
     }
 

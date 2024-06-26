@@ -201,6 +201,39 @@ describe("example-queries-solana-verify", () => {
       program.account.querySignatureSet.fetch(validSignatureSet.publicKey)
     ).to.be.fulfilled;
   });
+  it("Rejects an invalid guardian set!", async () => {
+    const p = anchor.getProvider();
+    await expect(
+      program.methods
+        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+        .accountsPartial({
+          guardianSet: deriveGuardianSetKey(coreBridgeAddress, 2),
+          signatureSet: validSignatureSet.publicKey,
+        })
+        .rpc()
+    ).to.be.rejectedWith(
+      "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
+    );
+  });
+  it("Rejects an invalid query hash!", async () => {
+    const p = anchor.getProvider();
+    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+    const guardianSetIndex = info.guardianSetIndex;
+    await expect(
+      program.methods
+        .verifyQuery(Buffer.from(wethNameResponse.bytes + "00", "hex"))
+        .accountsPartial({
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          signatureSet: validSignatureSet.publicKey,
+        })
+        .rpc()
+    ).to.be.rejectedWith(
+      "Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
+    );
+  });
   it("Verifies mainnet queries!", async () => {
     const p = anchor.getProvider();
     const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
@@ -270,27 +303,10 @@ describe("example-queries-solana-verify", () => {
         .rpc()
     ).to.be.fulfilled;
   });
-  it("Parses queries!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    console.log(QueryResponse.from(wethNameResponse.bytes).request.requests[0]);
-    console.log(QueryResponse.from(wethNameResponse.bytes).responses[0]);
-    const tx = await program.methods
-      .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-      .accountsPartial({
-        guardianSet: deriveGuardianSetKey(coreBridgeAddress, guardianSetIndex),
-        signatureSet: validSignatureSet.publicKey,
-      })
-      .rpc();
-    let transaction: null | anchor.web3.VersionedTransactionResponse = null;
-    while (transaction == null) {
-      transaction = await p.connection.getTransaction(tx, {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      });
-    }
-    console.log(transaction);
+  it("Closed the signature set!", async () => {
+    await expect(
+      program.account.querySignatureSet.fetch(validMockSignatureSet.publicKey)
+    ).to.be.rejectedWith("Account does not exist or has no data");
   });
   it("Rejects an expired guardian set!", async () => {
     // notably, `opWethNameResponse` does not have guardian index 7 - xLabs, which is not in guardian set 2
@@ -341,20 +357,6 @@ describe("example-queries-solana-verify", () => {
       "Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
     );
   });
-  it("Rejects an invalid guardian set!", async () => {
-    const p = anchor.getProvider();
-    await expect(
-      program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(coreBridgeAddress, 2),
-          signatureSet: validSignatureSet.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
-    );
-  });
   it("Rejects an invalid signature set!", async () => {
     const p = anchor.getProvider();
     const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
@@ -372,25 +374,6 @@ describe("example-queries-solana-verify", () => {
         .rpc()
     ).to.be.rejectedWith(
       "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
-    );
-  });
-  it("Rejects an invalid query hash!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    await expect(
-      program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes + "00", "hex"))
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
-            guardianSetIndex
-          ),
-          signatureSet: validSignatureSet.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
     );
   });
   it("Rejects a no quorum signature set!", async () => {
