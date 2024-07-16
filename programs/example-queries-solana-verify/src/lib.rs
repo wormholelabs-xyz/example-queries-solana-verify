@@ -17,6 +17,10 @@ pub mod example_queries_solana_verify {
         Ok(())
     }
 
+    pub fn close_signatures(ctx: Context<CloseSignatures>) -> Result<()> {
+        processor::close_signatures(ctx)
+    }
+
     pub fn post_signatures(
         ctx: Context<PostSignatures>,
         guardian_signatures: Vec<[u8; 66]>,

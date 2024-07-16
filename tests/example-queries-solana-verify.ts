@@ -9,12 +9,6 @@ import { deriveGuardianSetKey } from "./helpers/guardianSet";
 
 use(chaiAsPromised);
 
-// borrowed from https://github.com/wormhole-foundation/wormhole-circle-integration/blob/solana/integration/solana/ts/tests/helpers/consts.ts
-export const PAYER_PRIVATE_KEY = Buffer.from(
-  "7037e963e55b4455cf3f0a2e670031fa16bd1ea79d921a94af9bd46856b6b9c00c1a5886fe1093df9fc438c296f9f7275b7718b6bc0e156d8d336c58f083996d",
-  "hex"
-);
-
 // TODO: PR to @wormhole-foundation/wormhole-query-sdk
 export function signaturesToSolanaArray(signatures: string[]) {
   return signatures.map((s) => [
@@ -406,5 +400,28 @@ describe("example-queries-solana-verify", () => {
     ).to.be.rejectedWith(
       "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
     );
+  });
+  it("Closes signaure accounts!", async () => {
+    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
+    await expect(
+      program.account.guardianSignatures.fetch(signatureKeypair.publicKey)
+    ).to.be.fulfilled;
+    await expect(
+      program.methods
+        .closeSignatures()
+        .accounts({
+          guardianSignatures: signatureKeypair.publicKey,
+        })
+        .rpc()
+    ).to.be.fulfilled;
+    await expect(
+      program.account.guardianSignatures.fetch(signatureKeypair.publicKey)
+    ).to.be.rejectedWith("Account does not exist or has no data");
   });
 });
