@@ -1,5 +1,5 @@
 mod ext;
 pub use ext::*;
 
-mod query_signature_set;
-pub use query_signature_set::*;
+mod guardian_signatures;
+pub use guardian_signatures::*;

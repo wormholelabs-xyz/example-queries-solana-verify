@@ -1,15 +1,11 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import {
-  QueryProxyMock,
-  QueryResponse,
-} from "@wormhole-foundation/wormhole-query-sdk";
+import { QueryProxyMock } from "@wormhole-foundation/wormhole-query-sdk";
 import { assert, expect, use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { ExampleQueriesSolanaVerify } from "../target/types/example_queries_solana_verify";
 import { getWormholeBridgeData } from "./helpers/config";
 import { deriveGuardianSetKey } from "./helpers/guardianSet";
-import { createVerifySignaturesInstructions } from "./helpers/verifySignature";
 
 use(chaiAsPromised);
 
@@ -18,6 +14,14 @@ export const PAYER_PRIVATE_KEY = Buffer.from(
   "7037e963e55b4455cf3f0a2e670031fa16bd1ea79d921a94af9bd46856b6b9c00c1a5886fe1093df9fc438c296f9f7275b7718b6bc0e156d8d336c58f083996d",
   "hex"
 );
+
+// TODO: PR to @wormhole-foundation/wormhole-query-sdk
+export function signaturesToSolanaArray(signatures: string[]) {
+  return signatures.map((s) => [
+    ...Buffer.from(s.substring(130, 132), "hex"),
+    ...Buffer.from(s.substring(0, 130), "hex"),
+  ]);
+}
 
 describe("example-queries-solana-verify", () => {
   // Configure the client to use the local cluster.
@@ -127,9 +131,6 @@ describe("example-queries-solana-verify", () => {
     await program.methods.initialize().rpc();
   });
 
-  const validSignatureSet = anchor.web3.Keypair.generate();
-  const validMockSignatureSet = anchor.web3.Keypair.generate();
-  const expiredSignatureSet = anchor.web3.Keypair.generate();
   const wethNameResponse = {
     bytes:
       "01000051ced87ef0a0bb371964f793bb665a01435d57c9dc79b9fb6f31323f99f557ee0fa583718753cb3b35fe7c2e9bab2afde3f8cfdbeee0432804cb3c9146027a9401000000370100000001010002010000002a0000000930783132346330643601c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000406fdde030100020100000095000000000124c0d60f319af73bad19735c2f795e3bf22c0cb3d6be77b5fbd3bc1cf197efdbfb506c000610e4cf31cfc001000000600000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000d5772617070656420457468657200000000000000000000000000000000000000",
@@ -169,255 +170,144 @@ describe("example-queries-solana-verify", () => {
     ],
   };
 
-  it("Verifies mainnet signatures!", async () => {
-    const p = anchor.getProvider();
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
-
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      wethNameResponse.bytes,
-      wethNameResponse.signatures,
-      validSignatureSet.publicKey
-    );
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    for (const tx of unsignedTransactions) {
-      await expect(
-        anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-          payer,
-          validSignatureSet,
-        ])
-      ).to.be.fulfilled;
-    }
-    // this will fail if the account does not exist, match discriminator, and parse
-    await expect(
-      program.account.querySignatureSet.fetch(validSignatureSet.publicKey)
-    ).to.be.fulfilled;
-  });
   it("Rejects an invalid guardian set!", async () => {
-    const p = anchor.getProvider();
+    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
       program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"), 5)
         .accountsPartial({
           guardianSet: deriveGuardianSetKey(coreBridgeAddress, 2),
-          signatureSet: validSignatureSet.publicKey,
+          guardianSignatures: signatureKeypair.publicKey,
         })
         .rpc()
     ).to.be.rejectedWith(
       "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
-    );
-  });
-  it("Rejects an invalid query hash!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    await expect(
-      program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes + "00", "hex"))
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
-            guardianSetIndex
-          ),
-          signatureSet: validSignatureSet.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "Error Code: InvalidMessageHash. Error Number: 6514. Error Message: InvalidMessageHash."
     );
   });
   it("Verifies mainnet queries!", async () => {
     const p = anchor.getProvider();
     const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
     const guardianSetIndex = info.guardianSetIndex;
+    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
       program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+        .verifyQuery(
+          Buffer.from(wethNameResponse.bytes, "hex"),
+          guardianSetIndex
+        )
         .accountsPartial({
+          guardianSignatures: signatureKeypair.publicKey,
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
           ),
-          signatureSet: validSignatureSet.publicKey,
         })
+        .preInstructions([
+          anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({
+            units: 420_000,
+          }),
+        ])
         .rpc()
     ).to.be.fulfilled;
+    await expect(
+      program.account.guardianSignatures.fetch(signatureKeypair.publicKey)
+    ).to.be.rejectedWith("Account does not exist or has no data");
   });
-  it("Verifies mock signatures!", async () => {
-    const p = anchor.getProvider();
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
+  it("Verifies mock queries!", async () => {
     const mock = new QueryProxyMock({});
     const mockSignatures = mock.sign(
       Buffer.from(wethNameResponse.bytes, "hex")
     );
-
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      wethNameResponse.bytes,
-      mockSignatures,
-      validMockSignatureSet.publicKey,
-      undefined,
-      mockGuardianSetIndex
-    );
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    for (const tx of unsignedTransactions) {
-      await expect(
-        anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-          payer,
-          validMockSignatureSet,
-        ])
-      ).to.be.fulfilled;
-    }
-    // this will fail if the account does not exist, match discriminator, and parse
-    await expect(
-      program.account.querySignatureSet.fetch(validMockSignatureSet.publicKey)
-    ).to.be.fulfilled;
-  });
-  it("Verifies mock queries!", async () => {
+    const signatureData = signaturesToSolanaArray(mockSignatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
       program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+        .verifyQuery(
+          Buffer.from(wethNameResponse.bytes, "hex"),
+          mockGuardianSetIndex
+        )
         .accountsPartial({
+          guardianSignatures: signatureKeypair.publicKey,
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             mockGuardianSetIndex
           ),
-          signatureSet: validMockSignatureSet.publicKey,
         })
         .rpc()
     ).to.be.fulfilled;
   });
-  it("Closed the signature set!", async () => {
-    await expect(
-      program.account.querySignatureSet.fetch(validMockSignatureSet.publicKey)
-    ).to.be.rejectedWith("Account does not exist or has no data");
-  });
   it("Rejects an expired guardian set!", async () => {
     // notably, `opWethNameResponse` does not have guardian index 7 - xLabs, which is not in guardian set 2
-
-    const p = anchor.getProvider();
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
     const guardianSetIndex = 2; // this one is expired
-
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      opWethNameResponse.bytes,
-      opWethNameResponse.signatures,
-      expiredSignatureSet.publicKey,
-      undefined,
-      guardianSetIndex
+    const signatureData = signaturesToSolanaArray(
+      opWethNameResponse.signatures
     );
-
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    for (const tx of unsignedTransactions) {
-      await expect(
-        anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-          payer,
-          expiredSignatureSet,
-        ])
-      ).to.be.fulfilled;
-    }
-
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
       program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
+        .verifyQuery(
+          Buffer.from(opWethNameResponse.bytes, "hex"),
+          guardianSetIndex
+        )
         .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
           ),
-          signatureSet: expiredSignatureSet.publicKey,
+          guardianSignatures: signatureKeypair.publicKey,
         })
         .rpc()
     ).to.be.rejectedWith(
       "Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
     );
   });
-  it("Rejects an invalid signature set!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    await expect(
-      program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"))
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
-            guardianSetIndex
-          ),
-          signatureSet: expiredSignatureSet.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
-    );
-  });
   it("Rejects a no quorum signature set!", async () => {
     const p = anchor.getProvider();
-    const noQuorumSignatureSet = anchor.web3.Keypair.generate();
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      wethNameResponse.bytes,
-      wethNameResponse.signatures.slice(1),
-      noQuorumSignatureSet.publicKey
-    );
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    for (const tx of unsignedTransactions) {
-      await expect(
-        anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-          payer,
-          noQuorumSignatureSet,
-        ])
-      ).to.be.fulfilled;
-    }
-    // this will fail if the account does not exist, match discriminator, and parse
-    await expect(
-      program.account.querySignatureSet.fetch(noQuorumSignatureSet.publicKey)
-    ).to.be.fulfilled;
     const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
     const guardianSetIndex = info.guardianSetIndex;
+    const signatureData = signaturesToSolanaArray(
+      wethNameResponse.signatures.slice(1)
+    );
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
       program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes + "00", "hex"))
+        .verifyQuery(
+          Buffer.from(wethNameResponse.bytes, "hex"),
+          guardianSetIndex
+        )
         .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
           ),
-          signatureSet: noQuorumSignatureSet.publicKey,
+          guardianSignatures: signatureKeypair.publicKey,
         })
         .rpc()
     ).to.be.rejectedWith(
@@ -426,95 +316,95 @@ describe("example-queries-solana-verify", () => {
   });
   it("Rejects a valid signature on the wrong guardian index!", async () => {
     const p = anchor.getProvider();
-    const badSignatureSet = anchor.web3.Keypair.generate();
+    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+    const guardianSetIndex = info.guardianSetIndex;
     const badSignatures = [...wethNameResponse.signatures];
     badSignatures[0] =
       "f122af3db0ae62af57bc16f0b3e79c86cbfc860a5994ca65928c06a739a2f4ca0496c7c1de38350e7b7cdc573fa0b7af981f3ac3d60298d67c76ca99d3bcf1040001";
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      wethNameResponse.bytes,
-      badSignatures,
-      badSignatureSet.publicKey
-    );
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    const tx = unsignedTransactions[0];
+    const signatureData = signaturesToSolanaArray(badSignatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
-      anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-        payer,
-        badSignatureSet,
-      ])
+      program.methods
+        .verifyQuery(
+          Buffer.from(wethNameResponse.bytes, "hex"),
+          guardianSetIndex
+        )
+        .accountsPartial({
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          guardianSignatures: signatureKeypair.publicKey,
+        })
+        .rpc()
     ).to.be.rejectedWith(
-      "failed to send transaction: Transaction precompile verification failure InvalidAccountIndex"
+      "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
     );
   });
   it("Rejects an invalid signature!", async () => {
     const p = anchor.getProvider();
-    const badSignatureSet = anchor.web3.Keypair.generate();
+    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+    const guardianSetIndex = info.guardianSetIndex;
     const badSignatures = [...wethNameResponse.signatures];
     badSignatures[0] =
       "f122af3db0ae62af57bc16f0b3e79c86cbfc860a5994ca65928c06a739a2f4ca0496c7c1de38350e7b7cdc573fa0b7af981f3ac3d60298d67c76ca99d3bcf1040102";
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      wethNameResponse.bytes,
-      badSignatures,
-      badSignatureSet.publicKey
-    );
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    const tx = unsignedTransactions[0];
+    const signatureData = signaturesToSolanaArray(badSignatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
-      anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-        payer,
-        badSignatureSet,
-      ])
+      program.methods
+        .verifyQuery(
+          Buffer.from(wethNameResponse.bytes, "hex"),
+          guardianSetIndex
+        )
+        .accountsPartial({
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          guardianSignatures: signatureKeypair.publicKey,
+        })
+        .rpc()
     ).to.be.rejectedWith(
-      "failed to send transaction: Transaction precompile verification failure InvalidAccountIndex"
+      "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
     );
   });
   it("Rejects a valid signature for the wrong message!", async () => {
     const p = anchor.getProvider();
-    const badSignatureSet = anchor.web3.Keypair.generate();
-    const payer = anchor.web3.Keypair.fromSecretKey(PAYER_PRIVATE_KEY);
-    const instructions = await createVerifySignaturesInstructions(
-      p.connection,
-      program,
-      coreBridgeAddress,
-      payer.publicKey,
-      wethNameResponse.bytes,
-      opWethNameResponse.signatures,
-      badSignatureSet.publicKey
-    );
-    const unsignedTransactions: anchor.web3.Transaction[] = [];
-    for (let i = 0; i < instructions.length; i += 2) {
-      unsignedTransactions.push(
-        new anchor.web3.Transaction().add(...instructions.slice(i, i + 2))
-      );
-    }
-    const tx = unsignedTransactions[0];
+    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+    const guardianSetIndex = info.guardianSetIndex;
+    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
+    const signatureKeypair = anchor.web3.Keypair.generate();
+    await program.methods
+      .postSignatures(signatureData, signatureData.length)
+      .accounts({ guardianSignatures: signatureKeypair.publicKey })
+      .signers([signatureKeypair])
+      .rpc();
     await expect(
-      anchor.web3.sendAndConfirmTransaction(p.connection, tx, [
-        payer,
-        badSignatureSet,
-      ])
+      program.methods
+        .verifyQuery(
+          Buffer.from(opWethNameResponse.bytes, "hex"),
+          guardianSetIndex
+        )
+        .accountsPartial({
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          guardianSignatures: signatureKeypair.publicKey,
+        })
+        .rpc()
     ).to.be.rejectedWith(
-      "failed to send transaction: Transaction precompile verification failure InvalidAccountIndex"
+      "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
     );
   });
 });
