@@ -18,16 +18,15 @@ use wormhole_solana_consts::CORE_BRIDGE_PROGRAM_ID;
 #[derive(Accounts)]
 #[instruction(_bytes: Vec<u8>, guardian_set_index: u32)]
 pub struct VerifyQuery<'info> {
-    /// Guardian set used for signature verification (whose index should agree with the signature
-    /// set account's guardian set index).
+    /// Guardian set used for signature verification.
     #[account(
         seeds = [
             WormholeGuardianSet::SEED_PREFIX,
             guardian_set_index.to_be_bytes().as_ref()
-            ],
-            bump,
-            seeds::program = CORE_BRIDGE_PROGRAM_ID
-        )]
+        ],
+        bump,
+        seeds::program = CORE_BRIDGE_PROGRAM_ID
+    )]
     guardian_set: Account<'info, WormholeGuardianSet>,
 
     /// Stores unverified guardian signatures as they are too large to fit in the instruction data.
@@ -41,7 +40,7 @@ pub struct VerifyQuery<'info> {
 
 impl<'info> VerifyQuery<'info> {
     pub fn constraints(ctx: &Context<Self>, bytes: &Vec<u8>) -> Result<()> {
-        let guardian_set = ctx.accounts.guardian_set.clone().into_inner();
+        let guardian_set = &ctx.accounts.guardian_set;
 
         // Check that the guardian set is still active.
         let timestamp = Clock::get()?
@@ -91,14 +90,14 @@ impl<'info> VerifyQuery<'info> {
             if let Some(last_index) = last_guardian_index {
                 require!(
                     index > last_index,
-                    ExampleQueriesSolanaVerifyError::InvalidGuardianIndex
+                    ExampleQueriesSolanaVerifyError::InvalidGuardianIndexNonIncreasing
                 );
             }
 
             // Does this guardian index exist in this guardian set?
-            let guardian_pubkey = guardian_keys
-                .get(index)
-                .ok_or_else(|| error!(ExampleQueriesSolanaVerifyError::InvalidGuardianIndex))?;
+            let guardian_pubkey = guardian_keys.get(index).ok_or_else(|| {
+                error!(ExampleQueriesSolanaVerifyError::InvalidGuardianIndexOutOfRange)
+            })?;
 
             // Now verify that the signature agrees with the expected Guardian's pubkey.
             verify_guardian_signature(&sig, guardian_pubkey, digest.as_ref())?;

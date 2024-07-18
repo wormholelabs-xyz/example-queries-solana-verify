@@ -1,21 +1,17 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { QueryProxyMock } from "@wormhole-foundation/wormhole-query-sdk";
-import { assert, expect, use } from "chai";
+import { expect, use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { ExampleQueriesSolanaVerify } from "../target/types/example_queries_solana_verify";
 import { getWormholeBridgeData } from "./helpers/config";
 import { deriveGuardianSetKey } from "./helpers/guardianSet";
+import { signaturesToSolanaArray } from "./helpers/utils/signaturesToSolanaArray";
 
 use(chaiAsPromised);
 
-// TODO: PR to @wormhole-foundation/wormhole-query-sdk
-export function signaturesToSolanaArray(signatures: string[]) {
-  return signatures.map((s) => [
-    ...Buffer.from(s.substring(130, 132), "hex"),
-    ...Buffer.from(s.substring(0, 130), "hex"),
-  ]);
-}
+const fmtTest = (instruction: string, name: string) =>
+  `${instruction.padEnd(30)} ${name}`;
 
 describe("example-queries-solana-verify", () => {
   // Configure the client to use the local cluster.
@@ -24,105 +20,62 @@ describe("example-queries-solana-verify", () => {
   const program = anchor.workspace
     .ExampleQueriesSolanaVerify as Program<ExampleQueriesSolanaVerify>;
 
+  const programPaidBy = (
+    payer: anchor.web3.Keypair
+  ): Program<ExampleQueriesSolanaVerify> => {
+    const newProvider = new anchor.AnchorProvider(
+      anchor.getProvider().connection,
+      new anchor.Wallet(payer),
+      {}
+    );
+    return new anchor.Program<ExampleQueriesSolanaVerify>(
+      program.idl,
+      newProvider
+    );
+  };
+
+  const devnetCoreBridgeAddress = new anchor.web3.PublicKey(
+    "Bridge1p5gheXUvJ6jGWGeCsgPKgnE3YgdGKRVCMY9o"
+  );
   const coreBridgeAddress = new anchor.web3.PublicKey(
     "worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth"
   );
 
+  const expiredGuardianSetIndex = 2;
+  let guardianSetIndex = 0; // updated to the current index in initialize
   const mockGuardianSetIndex = 5;
 
-  it("Core exists!", async () => {
-    const p = anchor.getProvider();
-    {
-      // devnet
-      const coreBridge = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey("Bridge1p5gheXUvJ6jGWGeCsgPKgnE3YgdGKRVCMY9o")
-      );
-      assert(coreBridge !== null, "devnet core bridge program does not exist");
-      const bridgeConfig = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey(
-          "FKoMTctsC7vJbEqyRiiPskPnuQx2tX1kurmvWByq5uZP"
-        )
-      );
-      assert(
-        bridgeConfig !== null,
-        "devnet bridge config account does not exist"
-      );
-      const guardianSet = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey(
-          "6MxkvoEwgB9EqQRLNhvYaPGhfcLtBtpBqdQugr3AZUgD"
-        )
-      );
-      assert(
-        guardianSet !== null,
-        "devnet guardian set account does not exist"
-      );
-    }
-    {
-      // testnet
-      const coreBridge = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey(
-          "3u8hJUVTA4jH1wYAyUur7FFZVQ8H635K3tSHHF4ssjQ5"
-        )
-      );
-      assert(coreBridge !== null, "testnet core bridge program does not exist");
-      const bridgeConfig = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey(
-          "6bi4JGDoRwUs9TYBuvoA7dUVyikTJDrJsJU1ew6KVLiu"
-        )
-      );
-      assert(
-        bridgeConfig !== null,
-        "testnet bridge config account does not exist"
-      );
-      const guardianSet = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey("dxZtypiKT5D9LYzdPxjvSZER9MgYfeRVU5qpMTMTRs4")
-      );
-      assert(
-        guardianSet !== null,
-        "testnet guardian set account does not exist"
-      );
-    }
-    {
-      // mainnet
-      const coreBridge = await p.connection.getAccountInfo(coreBridgeAddress);
-      assert(coreBridge !== null, "mainnet core bridge program does not exist");
-      const bridgeConfig = await p.connection.getAccountInfo(
-        new anchor.web3.PublicKey(
-          "2yVjuQwpsvdsrywzsJJVs9Ueh4zayyo5DYJbBNc3DDpn"
-        )
-      );
-      assert(
-        bridgeConfig !== null,
-        "mainnet bridge config account does not exist"
-      );
-      const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-      const currentGuardianSetIndex = info.guardianSetIndex;
-      assert(
-        mockGuardianSetIndex === currentGuardianSetIndex + 1,
-        "mockGuardianSetIndex is not set to following index"
-      );
-      for (
-        let guardianSetIndex = 0;
-        guardianSetIndex <= mockGuardianSetIndex;
-        guardianSetIndex++
-      ) {
-        const gsAddr = deriveGuardianSetKey(
-          coreBridgeAddress,
-          guardianSetIndex
-        );
-        const guardianSet = await p.connection.getAccountInfo(
-          new anchor.web3.PublicKey(gsAddr)
-        );
-        assert(
-          guardianSet !== null,
-          `mainnet guardian set ${guardianSetIndex} account (${gsAddr}) does not exist`
-        );
-      }
-    }
-  });
+  const secondAccount = anchor.web3.Keypair.generate();
 
-  it("Is initialized!", async () => {
+  async function postQuerySigs(
+    querySignatures: string[],
+    signaturesKeypair: anchor.web3.Keypair,
+    totalSignatures: number = 0,
+    p: Program<ExampleQueriesSolanaVerify> = program
+  ) {
+    const signatureData = signaturesToSolanaArray(querySignatures);
+    await p.methods
+      .postSignatures(signatureData, totalSignatures || signatureData.length)
+      .accounts({ guardianSignatures: signaturesKeypair.publicKey })
+      .signers([signaturesKeypair])
+      .rpc();
+  }
+
+  it(fmtTest("initialize", "Successfully initializes"), async () => {
     await program.methods.initialize().rpc();
+    // fetch current guardian set
+    const p = anchor.getProvider();
+    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
+    guardianSetIndex = info.guardianSetIndex;
+    // other setup
+    const tx = await p.connection.requestAirdrop(
+      secondAccount.publicKey,
+      10000000000
+    );
+    await p.connection.confirmTransaction({
+      ...(await p.connection.getLatestBlockhash()),
+      signature: tx,
+    });
   });
 
   const wethNameResponse = {
@@ -164,36 +117,253 @@ describe("example-queries-solana-verify", () => {
     ],
   };
 
-  it("Rejects an invalid guardian set!", async () => {
-    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
+  it(fmtTest("post_signatures", "Successfully posts signatures"), async () => {
+    const signaturesKeypair = anchor.web3.Keypair.generate();
+    await postQuerySigs(wethNameResponse.signatures, signaturesKeypair);
+    // this will fail if the account does not exist, match discriminator, and parse
+    await expect(
+      program.account.guardianSignatures.fetch(signaturesKeypair.publicKey)
+    ).to.be.fulfilled;
+  });
+
+  it(
+    fmtTest("post_signatures", "Successfully appends signatures"),
+    async () => {
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      const expectedSigs1 = signaturesToSolanaArray(
+        wethNameResponse.signatures.slice(0, 5)
+      );
+      await postQuerySigs(
+        wethNameResponse.signatures.slice(0, 5),
+        signaturesKeypair,
+        wethNameResponse.signatures.length
+      );
+      expect(
+        (
+          await program.account.guardianSignatures.fetch(
+            signaturesKeypair.publicKey
+          )
+        ).guardianSignatures
+      ).to.deep.equal(expectedSigs1);
+
+      const expectedSigs2 = signaturesToSolanaArray(
+        wethNameResponse.signatures
+      );
+      await postQuerySigs(
+        wethNameResponse.signatures.slice(5),
+        signaturesKeypair,
+        wethNameResponse.signatures.length
+      );
+      expect(
+        (
+          await program.account.guardianSignatures.fetch(
+            signaturesKeypair.publicKey
+          )
+        ).guardianSignatures
+      ).to.deep.equal(expectedSigs2);
+    }
+  );
+
+  it(
+    fmtTest("post_signatures", "Rejects append by non-initial payer"),
+    async () => {
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await postQuerySigs(
+        wethNameResponse.signatures.slice(0, 1),
+        signaturesKeypair,
+        wethNameResponse.signatures.length
+      );
+      const otherPayersProgram = programPaidBy(secondAccount);
+      await expect(
+        postQuerySigs(
+          wethNameResponse.signatures.slice(1),
+          signaturesKeypair,
+          wethNameResponse.signatures.length,
+          otherPayersProgram
+        )
+      ).to.be.rejectedWith("WriteAuthorityMismatch.");
+    }
+  );
+
+  it(
+    fmtTest("verify_query", "Successfully verifies mainnet queries"),
+    async () => {
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await postQuerySigs(wethNameResponse.signatures, signaturesKeypair);
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            guardianSetIndex
+          )
+          .accountsPartial({
+            guardianSignatures: signaturesKeypair.publicKey,
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+          })
+          .preInstructions([
+            anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({
+              units: 420_000,
+            }),
+          ])
+          .rpc()
+      ).to.be.fulfilled;
+      await expect(
+        program.account.guardianSignatures.fetch(signaturesKeypair.publicKey)
+      ).to.be.rejectedWith("Account does not exist or has no data");
+    }
+  );
+
+  const successfulSignaturesKeypair = anchor.web3.Keypair.generate();
+
+  it(
+    fmtTest("verify_query", "Successfully verifies mock queries"),
+    async () => {
+      const mock = new QueryProxyMock({});
+      const mockSignatures = mock.sign(
+        Buffer.from(wethNameResponse.bytes, "hex")
+      );
+      await postQuerySigs(mockSignatures, successfulSignaturesKeypair);
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            mockGuardianSetIndex
+          )
+          .accountsPartial({
+            guardianSignatures: successfulSignaturesKeypair.publicKey,
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              mockGuardianSetIndex
+            ),
+          })
+          .rpc()
+      ).to.be.fulfilled;
+    }
+  );
+
+  it(
+    fmtTest("verify_query", "Successfully closed the signature set"),
+    async () => {
+      await expect(
+        program.account.guardianSignatures.fetch(
+          successfulSignaturesKeypair.publicKey
+        )
+      ).to.be.rejectedWith("Account does not exist or has no data");
+    }
+  );
+
+  const validSignaturesKeypair = anchor.web3.Keypair.generate();
+
+  it(
+    fmtTest(
+      "verify_query",
+      "Rejects guardian set account not owned by the core bridge"
+    ),
+    async () => {
+      await postQuerySigs(wethNameResponse.signatures, validSignaturesKeypair);
+      await expect(
+        program.methods
+          .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"), 0)
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(devnetCoreBridgeAddress, 0),
+            guardianSignatures: validSignaturesKeypair.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        "AnchorError caused by account: guardian_set. Error Code: AccountOwnedByWrongProgram."
+      );
+    }
+  );
+
+  it(
+    fmtTest("verify_query", "Rejects guardian set account mismatch"),
+    async () => {
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            mockGuardianSetIndex
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+            guardianSignatures: validSignaturesKeypair.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds."
+      );
+    }
+  );
+
+  it(
+    fmtTest("verify_query", "Rejects refund recipient account mismatch"),
+    async () => {
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            mockGuardianSetIndex
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              mockGuardianSetIndex
+            ),
+            guardianSignatures: validSignaturesKeypair.publicKey,
+            refundRecipient: secondAccount.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        "AnchorError caused by account: guardian_signatures. Error Code: ConstraintHasOne."
+      );
+    }
+  );
+
+  it(fmtTest("verify_query", "Rejects expired guardian set"), async () => {
+    // notably, `opWethNameResponse` does not have guardian index 7 - xLabs, which is not in guardian set 2
+    const signatureData = signaturesToSolanaArray(
+      opWethNameResponse.signatures
+    );
+    const signaturesKeypair = anchor.web3.Keypair.generate();
     await program.methods
       .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
+      .accounts({ guardianSignatures: signaturesKeypair.publicKey })
+      .signers([signaturesKeypair])
       .rpc();
     await expect(
       program.methods
-        .verifyQuery(Buffer.from(wethNameResponse.bytes, "hex"), 5)
+        .verifyQuery(
+          Buffer.from(opWethNameResponse.bytes, "hex"),
+          expiredGuardianSetIndex
+        )
         .accountsPartial({
-          guardianSet: deriveGuardianSetKey(coreBridgeAddress, 2),
-          guardianSignatures: signatureKeypair.publicKey,
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            expiredGuardianSetIndex
+          ),
+          guardianSignatures: signaturesKeypair.publicKey,
         })
         .rpc()
     ).to.be.rejectedWith(
-      "AnchorError caused by account: guardian_set. Error Code: ConstraintSeeds. Error Number: 2006. Error Message: A seeds constraint was violated."
+      "Error Code: GuardianSetExpired. Error Number: 6257. Error Message: GuardianSetExpired."
     );
   });
-  it("Verifies mainnet queries!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
+
+  it(fmtTest("verify_query", "Rejects no quorum"), async () => {
+    const signatureData = signaturesToSolanaArray(
+      wethNameResponse.signatures.slice(1)
+    );
+    const signaturesKeypair = anchor.web3.Keypair.generate();
     await program.methods
       .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
+      .accounts({ guardianSignatures: signaturesKeypair.publicKey })
+      .signers([signaturesKeypair])
       .rpc();
     await expect(
       program.methods
@@ -202,157 +372,225 @@ describe("example-queries-solana-verify", () => {
           guardianSetIndex
         )
         .accountsPartial({
-          guardianSignatures: signatureKeypair.publicKey,
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             guardianSetIndex
           ),
+          guardianSignatures: signaturesKeypair.publicKey,
         })
-        .preInstructions([
-          anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({
-            units: 420_000,
-          }),
-        ])
         .rpc()
-    ).to.be.fulfilled;
-    await expect(
-      program.account.guardianSignatures.fetch(signatureKeypair.publicKey)
-    ).to.be.rejectedWith("Account does not exist or has no data");
-  });
-  it("Verifies mock queries!", async () => {
-    const mock = new QueryProxyMock({});
-    const mockSignatures = mock.sign(
-      Buffer.from(wethNameResponse.bytes, "hex")
+    ).to.be.rejectedWith(
+      "Error Code: NoQuorum. Error Number: 6259. Error Message: NoQuorum."
     );
-    const signatureData = signaturesToSolanaArray(mockSignatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
-    await program.methods
-      .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
-      .rpc();
+  });
+
+  it(
+    fmtTest("verify_query", "Rejects out of order guardian signatures"),
+    async () => {
+      const signatureSet = anchor.web3.Keypair.generate();
+      await postQuerySigs(
+        [
+          ...wethNameResponse.signatures.slice(1),
+          ...wethNameResponse.signatures.slice(0, 1),
+        ],
+        signatureSet
+      );
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            guardianSetIndex
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+            guardianSignatures: signatureSet.publicKey,
+          })
+          .preInstructions([
+            anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({
+              units: 420_000,
+            }),
+          ])
+          .rpc()
+      ).to.be.rejectedWith("InvalidGuardianIndexNonIncreasing.");
+    }
+  );
+
+  it(
+    fmtTest("verify_query", "Rejects duplicate guardian signatures"),
+    async () => {
+      const signatureSet = anchor.web3.Keypair.generate();
+      await postQuerySigs(
+        new Array(13).fill(wethNameResponse.signatures[0]),
+        signatureSet
+      );
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            guardianSetIndex
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+            guardianSignatures: signatureSet.publicKey,
+          })
+          .preInstructions([
+            anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({
+              units: 420_000,
+            }),
+          ])
+          .rpc()
+      ).to.be.rejectedWith("InvalidGuardianIndexNonIncreasing.");
+    }
+  );
+
+  it(
+    fmtTest("verify_query", "Rejects guardian index out of bounds"),
+    async () => {
+      const signatureSet = anchor.web3.Keypair.generate();
+      await postQuerySigs(
+        [
+          wethNameResponse.signatures[0].substring(0, 130) + "20",
+          ...wethNameResponse.signatures.slice(1),
+        ],
+        signatureSet
+      );
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
+            guardianSetIndex
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+            guardianSignatures: signatureSet.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith("InvalidGuardianIndexOutOfRange.");
+    }
+  );
+
+  it(fmtTest("verify_query", "Rejects invalid signature"), async () => {
+    const signatureSet = anchor.web3.Keypair.generate();
+    const badRecovery = "02";
+    await postQuerySigs(
+      [
+        `${wethNameResponse.signatures[0].substring(
+          0,
+          128
+        )}${badRecovery}${wethNameResponse.signatures[0].substring(130)}`,
+        ...wethNameResponse.signatures.slice(1),
+      ],
+      signatureSet
+    );
     await expect(
       program.methods
         .verifyQuery(
           Buffer.from(wethNameResponse.bytes, "hex"),
-          mockGuardianSetIndex
+          guardianSetIndex
         )
         .accountsPartial({
-          guardianSignatures: signatureKeypair.publicKey,
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          guardianSignatures: signatureSet.publicKey,
+        })
+        .rpc()
+    ).to.be.rejectedWith("InvalidSignature.");
+  });
+
+  it(fmtTest("verify_query", "Rejects invalid message hash"), async () => {
+    await expect(
+      program.methods
+        .verifyQuery(
+          Buffer.from(wethNameResponse.bytes + "00", "hex"),
+          guardianSetIndex
+        )
+        .accountsPartial({
+          guardianSet: deriveGuardianSetKey(
+            coreBridgeAddress,
+            guardianSetIndex
+          ),
+          guardianSignatures: validSignaturesKeypair.publicKey,
+        })
+        .rpc()
+    ).to.be.rejectedWith("InvalidGuardianKeyRecovery.");
+  });
+
+  it(fmtTest("verify_query", "Rejects un-parse-able response"), async () => {
+    const badBytes = Buffer.from("00" + wethNameResponse.bytes, "hex");
+    const badBytesSigs = new QueryProxyMock({}).sign(badBytes);
+    const signatureSet = anchor.web3.Keypair.generate();
+    await postQuerySigs(badBytesSigs, signatureSet);
+    await expect(
+      program.methods
+        .verifyQuery(badBytes, mockGuardianSetIndex)
+        .accountsPartial({
           guardianSet: deriveGuardianSetKey(
             coreBridgeAddress,
             mockGuardianSetIndex
           ),
+          guardianSignatures: signatureSet.publicKey,
         })
         .rpc()
-    ).to.be.fulfilled;
+    ).to.be.rejectedWith("FailedToParseResponse.");
   });
-  it("Rejects an expired guardian set!", async () => {
-    // notably, `opWethNameResponse` does not have guardian index 7 - xLabs, which is not in guardian set 2
-    const guardianSetIndex = 2; // this one is expired
-    const signatureData = signaturesToSolanaArray(
-      opWethNameResponse.signatures
-    );
-    const signatureKeypair = anchor.web3.Keypair.generate();
-    await program.methods
-      .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
-      .rpc();
-    await expect(
-      program.methods
-        .verifyQuery(
-          Buffer.from(opWethNameResponse.bytes, "hex"),
-          guardianSetIndex
-        )
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
+
+  it(
+    fmtTest(
+      "verify_query",
+      "Rejects a valid signature on the wrong guardian index"
+    ),
+    async () => {
+      const badSignatures = [...wethNameResponse.signatures];
+      badSignatures[0] =
+        "f122af3db0ae62af57bc16f0b3e79c86cbfc860a5994ca65928c06a739a2f4ca0496c7c1de38350e7b7cdc573fa0b7af981f3ac3d60298d67c76ca99d3bcf1040001";
+      const signatureData = signaturesToSolanaArray(badSignatures);
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await program.methods
+        .postSignatures(signatureData, signatureData.length)
+        .accounts({ guardianSignatures: signaturesKeypair.publicKey })
+        .signers([signaturesKeypair])
+        .rpc();
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(wethNameResponse.bytes, "hex"),
             guardianSetIndex
-          ),
-          guardianSignatures: signatureKeypair.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "Error Code: GuardianSetExpired. Error Number: 7798. Error Message: GuardianSetExpired."
-    );
-  });
-  it("Rejects a no quorum signature set!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    const signatureData = signaturesToSolanaArray(
-      wethNameResponse.signatures.slice(1)
-    );
-    const signatureKeypair = anchor.web3.Keypair.generate();
-    await program.methods
-      .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
-      .rpc();
-    await expect(
-      program.methods
-        .verifyQuery(
-          Buffer.from(wethNameResponse.bytes, "hex"),
-          guardianSetIndex
-        )
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
-            guardianSetIndex
-          ),
-          guardianSignatures: signatureKeypair.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "Error Code: NoQuorum. Error Number: 6515. Error Message: NoQuorum."
-    );
-  });
-  it("Rejects a valid signature on the wrong guardian index!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    const badSignatures = [...wethNameResponse.signatures];
-    badSignatures[0] =
-      "f122af3db0ae62af57bc16f0b3e79c86cbfc860a5994ca65928c06a739a2f4ca0496c7c1de38350e7b7cdc573fa0b7af981f3ac3d60298d67c76ca99d3bcf1040001";
-    const signatureData = signaturesToSolanaArray(badSignatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
-    await program.methods
-      .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
-      .rpc();
-    await expect(
-      program.methods
-        .verifyQuery(
-          Buffer.from(wethNameResponse.bytes, "hex"),
-          guardianSetIndex
-        )
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
-            guardianSetIndex
-          ),
-          guardianSignatures: signatureKeypair.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
-    );
-  });
-  it("Rejects an invalid signature!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+            guardianSignatures: signaturesKeypair.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        "Error Code: InvalidGuardianKeyRecovery. Error Number: 6263. Error Message: InvalidGuardianKeyRecovery."
+      );
+    }
+  );
+
+  it(fmtTest("verify_query", "Rejects an invalid signature"), async () => {
     const badSignatures = [...wethNameResponse.signatures];
     badSignatures[0] =
       "f122af3db0ae62af57bc16f0b3e79c86cbfc860a5994ca65928c06a739a2f4ca0496c7c1de38350e7b7cdc573fa0b7af981f3ac3d60298d67c76ca99d3bcf1040102";
     const signatureData = signaturesToSolanaArray(badSignatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
+    const signaturesKeypair = anchor.web3.Keypair.generate();
     await program.methods
       .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
+      .accounts({ guardianSignatures: signaturesKeypair.publicKey })
+      .signers([signaturesKeypair])
       .rpc();
     await expect(
       program.methods
@@ -365,63 +603,106 @@ describe("example-queries-solana-verify", () => {
             coreBridgeAddress,
             guardianSetIndex
           ),
-          guardianSignatures: signatureKeypair.publicKey,
+          guardianSignatures: signaturesKeypair.publicKey,
         })
         .rpc()
     ).to.be.rejectedWith(
-      "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
+      "Error Code: InvalidGuardianKeyRecovery. Error Number: 6263. Error Message: InvalidGuardianKeyRecovery."
     );
   });
-  it("Rejects a valid signature for the wrong message!", async () => {
-    const p = anchor.getProvider();
-    const info = await getWormholeBridgeData(p.connection, coreBridgeAddress);
-    const guardianSetIndex = info.guardianSetIndex;
-    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
-    await program.methods
-      .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
-      .rpc();
-    await expect(
-      program.methods
-        .verifyQuery(
-          Buffer.from(opWethNameResponse.bytes, "hex"),
-          guardianSetIndex
-        )
-        .accountsPartial({
-          guardianSet: deriveGuardianSetKey(
-            coreBridgeAddress,
+
+  it(
+    fmtTest("verify_query", "Rejects a valid signature for the wrong message"),
+    async () => {
+      const signatureData = signaturesToSolanaArray(
+        wethNameResponse.signatures
+      );
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await program.methods
+        .postSignatures(signatureData, signatureData.length)
+        .accounts({ guardianSignatures: signaturesKeypair.publicKey })
+        .signers([signaturesKeypair])
+        .rpc();
+      await expect(
+        program.methods
+          .verifyQuery(
+            Buffer.from(opWethNameResponse.bytes, "hex"),
             guardianSetIndex
-          ),
-          guardianSignatures: signatureKeypair.publicKey,
-        })
-        .rpc()
-    ).to.be.rejectedWith(
-      "Error Code: InvalidGuardianKeyRecovery. Error Number: 7800. Error Message: InvalidGuardianKeyRecovery."
-    );
-  });
-  it("Closes signaure accounts!", async () => {
-    const signatureData = signaturesToSolanaArray(wethNameResponse.signatures);
-    const signatureKeypair = anchor.web3.Keypair.generate();
-    await program.methods
-      .postSignatures(signatureData, signatureData.length)
-      .accounts({ guardianSignatures: signatureKeypair.publicKey })
-      .signers([signatureKeypair])
-      .rpc();
-    await expect(
-      program.account.guardianSignatures.fetch(signatureKeypair.publicKey)
-    ).to.be.fulfilled;
-    await expect(
-      program.methods
-        .closeSignatures()
-        .accounts({
-          guardianSignatures: signatureKeypair.publicKey,
-        })
-        .rpc()
-    ).to.be.fulfilled;
-    await expect(
-      program.account.guardianSignatures.fetch(signatureKeypair.publicKey)
-    ).to.be.rejectedWith("Account does not exist or has no data");
-  });
+          )
+          .accountsPartial({
+            guardianSet: deriveGuardianSetKey(
+              coreBridgeAddress,
+              guardianSetIndex
+            ),
+            guardianSignatures: signaturesKeypair.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        "Error Code: InvalidGuardianKeyRecovery. Error Number: 6263. Error Message: InvalidGuardianKeyRecovery."
+      );
+    }
+  );
+
+  it(
+    fmtTest("close_signatures", "Successfully closes signature accounts"),
+    async () => {
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await postQuerySigs(wethNameResponse.signatures, signaturesKeypair);
+      await expect(
+        program.account.guardianSignatures.fetch(signaturesKeypair.publicKey)
+      ).to.be.fulfilled;
+      await expect(
+        program.methods
+          .closeSignatures()
+          .accounts({
+            guardianSignatures: signaturesKeypair.publicKey,
+          })
+          .rpc()
+      ).to.be.fulfilled;
+      await expect(
+        program.account.guardianSignatures.fetch(signaturesKeypair.publicKey)
+      ).to.be.rejectedWith("Account does not exist or has no data");
+    }
+  );
+
+  it(
+    fmtTest("close_signatures", "Rejects refund recipient account mismatch"),
+    async () => {
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await postQuerySigs(wethNameResponse.signatures, signaturesKeypair);
+      const otherPayersProgram = programPaidBy(secondAccount);
+      await expect(
+        otherPayersProgram.methods
+          .closeSignatures()
+          .accounts({
+            guardianSignatures: signaturesKeypair.publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        "AnchorError caused by account: guardian_signatures. Error Code: ConstraintHasOne."
+      );
+    }
+  );
+
+  it(
+    fmtTest("close_signatures", "Rejects without refund recipient as signer"),
+    async () => {
+      const signaturesKeypair = anchor.web3.Keypair.generate();
+      await postQuerySigs(wethNameResponse.signatures, signaturesKeypair);
+      const otherPayersProgram = programPaidBy(secondAccount);
+      await expect(
+        otherPayersProgram.methods
+          .closeSignatures()
+          .accountsPartial({
+            guardianSignatures: signaturesKeypair.publicKey,
+            refundRecipient: anchor.getProvider().publicKey,
+          })
+          .rpc()
+      ).to.be.rejectedWith(
+        `Missing signature for public key [\`${anchor
+          .getProvider()
+          .publicKey.toString()}\`].`
+      );
+    }
+  );
 });

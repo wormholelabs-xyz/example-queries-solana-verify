@@ -4,8 +4,8 @@ declare_id!("HkDXBFRS9Tv9295d9wEVRL61c1pUXj3WZHiaTNZ9Q7TQ");
 
 pub mod error;
 
-mod processor;
-pub(crate) use processor::*;
+mod instructions;
+pub(crate) use instructions::*;
 
 pub mod state;
 
@@ -18,7 +18,7 @@ pub mod example_queries_solana_verify {
     }
 
     pub fn close_signatures(ctx: Context<CloseSignatures>) -> Result<()> {
-        processor::close_signatures(ctx)
+        instructions::close_signatures(ctx)
     }
 
     pub fn post_signatures(
@@ -26,7 +26,7 @@ pub mod example_queries_solana_verify {
         guardian_signatures: Vec<[u8; 66]>,
         total_signatures: u8,
     ) -> Result<()> {
-        processor::post_signatures(ctx, guardian_signatures, total_signatures)
+        instructions::post_signatures(ctx, guardian_signatures, total_signatures)
     }
 
     pub fn verify_query(
@@ -34,7 +34,7 @@ pub mod example_queries_solana_verify {
         bytes: Vec<u8>,
         guardian_set_index: u32,
     ) -> Result<()> {
-        processor::verify_query(ctx, bytes, guardian_set_index)
+        instructions::verify_query(ctx, bytes, guardian_set_index)
     }
 }
 

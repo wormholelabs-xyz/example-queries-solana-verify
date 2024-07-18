@@ -1,4 +1,4 @@
-## Queries Verification on Solana PoC
+# Queries Verification on Solana PoC
 
 This is a demo of verifying and parsing [Wormhole Queries](https://wormhole.com/queries/) on Solana.
 
@@ -6,20 +6,35 @@ This project was made with [Anchor](https://www.anchor-lang.com/).
 
 Learn more about developing with Queries in [the docs](https://docs.wormhole.com/wormhole/queries/getting-started).
 
-> N.B. This is a work-in-progress provided for example purposes only.
+## Accounts
 
-- [x] Verify mainnet queries using an active mainnet core bridge guardian set account
-- [x] Verify mocked queries using a mock core bridge guardian set account on a mainnet address
-- [x] Validate a query result passed via instruction data
-- [x] Rust parsing for all query requests and responses
-- [x] Allow for cleanup of signature set accounts
+- [GuardianSignatures](programs/solana-world-id-program/src/state/guardian_signatures.rs) stores unverified guardian signatures for subsequent verification. These are created with `post_signatures` in service of verifying a root via Queries and closed when that root is verified with `verify_query` or can be explicitly closed with `close_signatures` by the initial payer.
 
-- [ ] Verify testnet queries using an active testnet core bridge guardian set account
-- [ ] Validate a query result passed via account
+## Instructions
 
-## Tests
+- [post_signatures](programs/example-queries-solana-verify/src/instructions/post_signatures.rs) posts unverified guardian signatures for verification during `update_root_with_query`.
+- [verify_query](programs/example-queries-solana-verify/src/instructions/verify_query.rs) with a Query response and `GuardianSignatures` account, verifies the signatures against an active guardian set and logs the Query response. This is where you would add additional verification relevant to your use case and process the result.
+- [close_signatures](programs/example-queries-solana-verify/src/instructions/close_signatures.rs) allows the initial payer to close a `GuardianSignatures` account in case the query was invalid.
 
-To run the tests, `anchor test`.
+## Testing
+
+```bash
+anchor test
+```
+
+## Building
+
+### Wormhole Testnet / Solana Devnet
+
+```bash
+anchor build -- --no-default-features --features testnet
+```
+
+### Mainnet
+
+```bash
+anchor build
+```
 
 ---
 
