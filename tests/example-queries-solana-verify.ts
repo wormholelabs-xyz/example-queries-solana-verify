@@ -1,12 +1,14 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { QueryProxyMock } from "@wormhole-foundation/wormhole-query-sdk";
+import {
+  QueryProxyMock,
+  signaturesToSolanaArray,
+} from "@wormhole-foundation/wormhole-query-sdk";
 import { expect, use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { ExampleQueriesSolanaVerify } from "../target/types/example_queries_solana_verify";
 import { getWormholeBridgeData } from "./helpers/config";
 import { deriveGuardianSetKey } from "./helpers/guardianSet";
-import { signaturesToSolanaArray } from "./helpers/utils/signaturesToSolanaArray";
 
 use(chaiAsPromised);
 
